@@ -1,0 +1,360 @@
+version: '3.8'
+
+services:
+  # PostgreSQL - Primary Data Store
+  postgres:
+    image: postgis/postgis:16-3.4
+    container_name: urbanpulse-postgres
+    environment:
+      POSTGRES_USER: urbanpulse
+      POSTGRES_PASSWORD: urbanpulse_secret
+      POSTGRES_DB: urbanpulse
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./infrastructure/docker/init-scripts:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U urbanpulse"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - urbanpulse-network
+
+  # Redis - Cache & Session Store
+  redis:
+    image: redis:7.2-alpine
+    container_name: urbanpulse-redis
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - urbanpulse-network
+
+  # Elasticsearch - Search & Analytics
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.11.0
+    container_name: urbanpulse-elasticsearch
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    ports:
+      - "9200:9200"
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9200/_cluster/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    networks:
+      - urbanpulse-network
+
+  # Zookeeper - Kafka dependency
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    container_name: urbanpulse-zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    ports:
+      - "2181:2181"
+    networks:
+      - urbanpulse-network
+
+  # Kafka - Event Streaming
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: urbanpulse-kafka
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+      - "29092:29092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+    healthcheck:
+      test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:29092"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    networks:
+      - urbanpulse-network
+
+  # Kafka UI
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: urbanpulse-kafka-ui
+    depends_on:
+      - kafka
+    ports:
+      - "8080:8080"
+    environment:
+      KAFKA_CLUSTERS_0_NAME: urbanpulse
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
+      KAFKA_CLUSTERS_0_ZOOKEEPER: zookeeper:2181
+    networks:
+      - urbanpulse-network
+
+  # API Gateway
+  api-gateway:
+    build:
+      context: ./backend/api-gateway
+      dockerfile: Dockerfile
+    container_name: urbanpulse-api-gateway
+    ports:
+      - "8081:8081"
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - AUTH_SERVICE_URL=http://auth-service:8082
+      - INFRASTRUCTURE_SERVICE_URL=http://infrastructure-service:8083
+      - ALERT_SERVICE_URL=http://alert-service:8084
+      - ANALYTICS_SERVICE_URL=http://analytics-service:8085
+      - PREDICTION_SERVICE_URL=http://prediction-service:8000
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    depends_on:
+      - redis
+      - auth-service
+      - infrastructure-service
+      - alert-service
+      - analytics-service
+      - prediction-service
+    networks:
+      - urbanpulse-network
+
+  # Auth Service
+  auth-service:
+    build:
+      context: ./backend/auth-service
+      dockerfile: Dockerfile
+    container_name: urbanpulse-auth-service
+    ports:
+      - "8082:8082"
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=urbanpulse
+      - DB_USER=urbanpulse
+      - DB_PASSWORD=urbanpulse_secret
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - JWT_SECRET=urbanpulse-jwt-secret-key-change-in-production
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    networks:
+      - urbanpulse-network
+
+  # Infrastructure Service
+  infrastructure-service:
+    build:
+      context: ./backend/infrastructure-service
+      dockerfile: Dockerfile
+    container_name: urbanpulse-infrastructure-service
+    ports:
+      - "8083:8083"
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=urbanpulse
+      - DB_USER=urbanpulse
+      - DB_PASSWORD=urbanpulse_secret
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - ES_HOST=elasticsearch
+      - ES_PORT=9200
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      elasticsearch:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    networks:
+      - urbanpulse-network
+
+  # Alert Service
+  alert-service:
+    build:
+      context: ./backend/alert-service
+      dockerfile: Dockerfile
+    container_name: urbanpulse-alert-service
+    ports:
+      - "8084:8084"
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=urbanpulse
+      - DB_USER=urbanpulse
+      - DB_PASSWORD=urbanpulse_secret
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    networks:
+      - urbanpulse-network
+
+  # Analytics Service
+  analytics-service:
+    build:
+      context: ./backend/analytics-service
+      dockerfile: Dockerfile
+    container_name: urbanpulse-analytics-service
+    ports:
+      - "8085:8085"
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=urbanpulse
+      - DB_USER=urbanpulse
+      - DB_PASSWORD=urbanpulse_secret
+      - ES_HOST=elasticsearch
+      - ES_PORT=9200
+    depends_on:
+      postgres:
+        condition: service_healthy
+      elasticsearch:
+        condition: service_healthy
+    networks:
+      - urbanpulse-network
+
+  # Prediction Service (Python/FastAPI)
+  prediction-service:
+    build:
+      context: ./ml-services/prediction-service
+      dockerfile: Dockerfile
+    container_name: urbanpulse-prediction-service
+    ports:
+      - "8000:8000"
+    environment:
+      - ENVIRONMENT=docker
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=urbanpulse
+      - DB_USER=urbanpulse
+      - DB_PASSWORD=urbanpulse_secret
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
+      - ES_HOST=elasticsearch
+      - ES_PORT=9200
+      - MODEL_PATH=/app/models
+    volumes:
+      - ./ml-services/prediction-service/app/models:/app/models
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    networks:
+      - urbanpulse-network
+
+  # MLflow - Model Registry
+  mlflow:
+    image: python:3.11-slim
+    container_name: urbanpulse-mlflow
+    ports:
+      - "5000:5000"
+    command: >
+      bash -c "pip install mlflow psycopg2-binary &&
+               mlflow server
+               --backend-store-uri postgresql://urbanpulse:urbanpulse_secret@postgres/mlflow
+               --default-artifact-root /mlflow/artifacts
+               --host 0.0.0.0
+               --port 5000"
+    volumes:
+      - mlflow_data:/mlflow
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - urbanpulse-network
+
+  # Angular Frontend
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: urbanpulse-frontend
+    ports:
+      - "4200:80"
+    depends_on:
+      - api-gateway
+    networks:
+      - urbanpulse-network
+
+  # Prometheus
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: urbanpulse-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    networks:
+      - urbanpulse-network
+
+  # Grafana
+  grafana:
+    image: grafana/grafana:latest
+    container_name: urbanpulse-grafana
+    ports:
+      - "3001:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards
+    depends_on:
+      - prometheus
+    networks:
+      - urbanpulse-network
+
+volumes:
+  postgres_data:
+  redis_data:
+  elasticsearch_data:
+  mlflow_data:
+  prometheus_data:
+  grafana_data:
+
+networks:
+  urbanpulse-network:
+    driver: bridge

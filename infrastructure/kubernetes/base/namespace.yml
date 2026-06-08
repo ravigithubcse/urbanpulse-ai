@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: urbanpulse
+  labels:
+    app: urbanpulse-ai
+    environment: production

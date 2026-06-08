@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: urbanpulse-config
+  namespace: urbanpulse
+data:
+  DB_HOST: "urbanpulse-postgres"
+  DB_PORT: "5432"
+  DB_NAME: "urbanpulse"
+  REDIS_HOST: "urbanpulse-redis"
+  REDIS_PORT: "6379"
+  ES_HOST: "urbanpulse-elasticsearch"
+  ES_PORT: "9200"
+  KAFKA_BOOTSTRAP_SERVERS: "urbanpulse-kafka:9092"
+  JWT_SECRET: "urbanpulse-jwt-secret-change-in-production"
+  SPRING_PROFILES_ACTIVE: "prod"

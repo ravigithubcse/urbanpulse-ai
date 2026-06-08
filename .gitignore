@@ -1,0 +1,70 @@
+# Compiled output
+/dist
+/tmp
+/out-tsc
+
+# Dependencies
+/node_modules
+*/node_modules
+*/target
+*.jar
+
+# IDEs
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Docker
+*.dockerignore
+docker-volumes/
+
+# Terraform
+*.tfstate
+*.tfstate.*
+.terraform/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Jupyter
+.ipynb_checkpoints/
+
+# ML Models
+*.pkl
+*.onnx
+*.h5
+models/*/model.pkl
+models/*/model.onnx
+
+# Test coverage
+coverage/
+.coverage
+htmlcov/
+
+# Misc
+*.pid
+*.seed
+*.pid.lock

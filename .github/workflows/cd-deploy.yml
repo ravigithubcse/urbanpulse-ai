@@ -1,0 +1,73 @@
+name: CD - Deploy to Kubernetes
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+
+    strategy:
+      matrix:
+        service: 
+          - { name: api-gateway, path: backend/api-gateway }
+          - { name: auth-service, path: backend/auth-service }
+          - { name: infrastructure-service, path: backend/infrastructure-service }
+          - { name: alert-service, path: backend/alert-service }
+          - { name: analytics-service, path: backend/analytics-service }
+          - { name: prediction-service, path: ml-services/prediction-service }
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Log in to Container Registry
+      uses: docker/login-action@v3
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Build and Push
+      uses: docker/build-push-action@v5
+      with:
+        context: ./${{ matrix.service.path }}
+        push: true
+        tags: |
+          ghcr.io/${{ github.repository }}/${{ matrix.service.name }}:${{ github.sha }}
+          ghcr.io/${{ github.repository }}/${{ matrix.service.name }}:latest
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Kubectl
+      uses: azure/setup-kubectl@v3
+
+    - name: Deploy to Kubernetes
+      run: |
+        echo "Deployment would happen here with proper K8s credentials"
+        echo "kubectl apply -k infrastructure/kubernetes/"
+
+    - name: Create Release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: v${{ github.run_number }}
+        release_name: Release v${{ github.run_number }}
+        body: |
+          Automated deployment of UrbanPulse AI
+          Commit: ${{ github.sha }}
+          Services: All microservices updated
