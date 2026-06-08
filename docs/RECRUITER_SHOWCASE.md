@@ -147,6 +147,6 @@ Access the deployed application:
 
 ## Contact
 
-**Ravi Kumar** - [ravikumar.dev](https://ravikumar.dev) - [LinkedIn](https://linkedin.com/in/ravikumar)
+**Ravi Kumar** - [ravikumar.dev](https://ravikumar.dev) - [LinkedIn](https://www.linkedin.com/in/ravikumar2002/)
 
 Open to opportunities at top tech companies building impactful products.
