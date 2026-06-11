@@ -382,3 +382,16 @@ Built with passion for building resilient, intelligent cities through AI.
 <p align="center">
   <b>Built for the future of smart cities</b>
 </p>
+
+---
+
+## 🔗 Related Projects
+
+| Project | Description |
+|---------|-------------|
+| **[SkillDNA AI](https://github.com/ravigithubcse/urbanpulse-ai)** | World's first Career Digital Twin platform — AI-powered career trajectory simulation, salary forecasting, and skill gap analysis. Built on Neo4j career graphs, causal inference ML, and real-time labour intelligence. |
+| [SupplySense AI](https://github.com/ravigithubcse/supplysense-ai) | Predictive supply chain risk intelligence with LSTM + RoBERTa NLP |
+| [AdaptiveFlow AI](https://github.com/ravigithubcse/adaptiveflow-ai) | Real-time cognitive process intelligence engine |
+| [CivicShield AI](https://github.com/ravigithubcse/civicshield-ai) | Multi-agent AI platform for community emergency response |
+
+---
