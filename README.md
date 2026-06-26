@@ -45,42 +45,81 @@ Cities lose **$450 billion annually** to infrastructure failures. UrbanPulse AI 
 
 ---
 
-## Architecture
+## 🏗️ Architecture
 
-### High-Level System Architecture
+```mermaid
+flowchart TB
+    Client["🌐 Angular 17 + Tailwind CSS
+Real-time Dashboards · WebSocket · Charts"]
 
+    subgraph GW["🔀 API Gateway  :8080"]
+        G1["JWT Auth Filter"]
+        G2["Rate Limiter"]
+        G3["Circuit Breaker"]
+    end
+
+    subgraph SVC["☕ Spring Boot Microservices"]
+        S1["🔐 Auth Service
+:8081 · JWT · Redis"]
+        S2["🏗️ Infrastructure Svc
+:8082 · PostGIS · Kafka"]
+        S3["🚨 Alert Service
+:8083 · Kafka · WebSocket"]
+        S4["📊 Analytics Svc
+:8084 · Elasticsearch"]
+    end
+
+    subgraph ML["🐍 Python ML Layer"]
+        M1["🤖 Prediction Service
+:8090 · FastAPI · ONNX Runtime"]
+        M2["📉 LSTM + SHAP
+Explainable AI"]
+    end
+
+    subgraph DATA["🗄️ Data Layer"]
+        D1["🐘 PostgreSQL 16
++ PostGIS"]
+        D2["⚡ Redis 7.2
+Cache"]
+        D3["🔎 Elasticsearch 8
+Analytics"]
+        D4["📨 Apache Kafka 3.6
+Event Streaming"]
+    end
+
+    Client --> GW
+    GW --> S1 & S2 & S3 & S4
+    S2 <-->|Kafka Events| D4
+    D4 --> ML
+    ML --> M1 --> M2
+    S1 <--> D2
+    S2 <--> D1
+    S3 <--> D4
+    S4 <--> D3
+
+    classDef client fill:#0d47a1,stroke:#42a5f5,color:#e3f2fd
+    classDef gw fill:#1a237e,stroke:#7986cb,color:#e8eaf6
+    classDef svc fill:#1b5e20,stroke:#66bb6a,color:#e8f5e9
+    classDef ml fill:#4a148c,stroke:#ba68c8,color:#f3e5f5
+    classDef data fill:#3e2723,stroke:#ff8a65,color:#fbe9e7
+    class Client client
+    class G1,G2,G3 gw
+    class S1,S2,S3,S4 svc
+    class M1,M2 ml
+    class D1,D2,D3,D4 data
 ```
-Client (Angular 17 + Tailwind)
-    |
-    v
-API Gateway (Spring Cloud Gateway) --> Rate Limiting, Circuit Breaker, JWT Auth
-    |
-    +-- Auth Service (Spring Boot + JWT + Redis)
-    +-- Infrastructure Service (Spring Boot + PostgreSQL/PostGIS + Kafka)
-    +-- Alert Service (Spring Boot + Kafka + WebSocket)
-    +-- Analytics Service (Spring Boot + Elasticsearch)
-    +-- Prediction Service (Python + FastAPI + ONNX Runtime + ML Models)
-    |
-Data Layer: PostgreSQL + Redis + Elasticsearch + Kafka + S3
-```
 
-### Technology Stack
+**Request Flow:**
+1. **Angular 17 SPA** connects to the API Gateway over HTTPS and WSS for live sensor streams
+2. **Spring Cloud Gateway** applies JWT validation, rate limiting, and circuit breaking before routing
+3. **Infrastructure Service** manages 4 asset types (water, bridges, roads, power) with geospatial PostGIS queries
+4. **Apache Kafka** acts as the central event bus — sensor readings flow through topics to ML and alerting
+5. **Python Prediction Service** runs ONNX Runtime inference (LSTM + SHAP) to forecast failures 72 hours ahead
+6. **Alert Service** fans out critical predictions via Kafka → WebSocket to connected dashboards in real-time
+7. **Analytics Service** indexes all events into Elasticsearch for full-text search and trend reports
+8. **Redis** caches auth tokens and hot sensor readings for sub-10ms response on frequent queries
 
-| Layer | Technology | Purpose |
-|-------|-----------|---------|
-| **Frontend** | Angular 17, TypeScript, Tailwind CSS | SPA with real-time dashboards |
-| **API Gateway** | Spring Cloud Gateway | Routing, rate limiting, circuit breaker |
-| **Auth Service** | Spring Boot 3.2, JWT, Redis | Authentication & authorization |
-| **Infrastructure** | Spring Boot 3.2, PostgreSQL, PostGIS | Asset & sensor management |
-| **Alert Service** | Spring Boot 3.2, Kafka, WebSocket | Intelligent alerting |
-| **Analytics** | Spring Boot 3.2, Elasticsearch | Reporting & search |
-| **Prediction** | Python, FastAPI, ONNX Runtime | ML inference at scale |
-| **Streaming** | Apache Kafka | Event-driven architecture |
-| **Database** | PostgreSQL 16 + PostGIS | Primary data with geospatial |
-| **Cache** | Redis 7.2 | Sessions, real-time features |
-| **Search** | Elasticsearch 8.11 | Analytics & full-text search |
-| **Deployment** | Docker, Kubernetes, GitHub Actions | CI/CD & orchestration |
-
+---
 ---
 
 ## Quick Start
